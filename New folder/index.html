@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KARTZONE | Advanced E-Commerce</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav>
+        <button class="mobile-menu-btn" onclick="document.querySelector('.sub-nav').classList.toggle('active')">☰</button>
+        <div class="logo" onclick="showView('home')">KART<span>ZONE</span></div>
+        <div class="nav-search">
+            <input type="text" id="search-input" placeholder="Search products, categories, or ask AI..." oninput="handleRealtimeSearch()">
+            <button class="mic-btn" onclick="startVoiceSearch('search-input')" title="Voice Search">🎤</button>
+            <button class="search-btn" onclick="handleRealtimeSearch()">🔍</button>
+        </div>
+        <div class="nav-actions">
+            <div class="nav-item" onclick="showView('orders')">
+                <span class="nav-item-top">Returns</span>
+                <span class="nav-item-bottom">& Orders</span>
+            </div>
+            <div class="nav-item" onclick="openAuthModal()" id="auth-nav-btn">
+                <span class="nav-item-top" id="nav-user-greeting">Hello, sign in</span>
+                <span class="nav-item-bottom" id="nav-user-action">Account & Lists</span>
+            </div>
+            <div class="nav-item cart-icon-wrapper" onclick="toggleCart()">
+                🛒 <span class="cart-badge" id="cart-count">0</span>
+            </div>
+        </div>
+    </nav>
+    <div class="sub-nav">
+        <span onclick="showView('home')">All</span>
+        <span onclick="filterCategory('Electronics')">Electronics</span>
+        <span onclick="filterCategory('Fashion')">Fashion</span>
+        <span onclick="filterCategory('Clothing')">Clothing</span>
+        <span onclick="filterCategory('Home')">Home</span>
+        <span onclick="showView('home')" style="color:var(--secondary); font-weight:bold;">Special Offers</span>
+    </div>
+
+    <div class="container">
+        
+        <!-- ================= HOME VIEW ================= -->
+        <div id="view-home">
+            
+            <!-- HERO BANNER WITH OFFERS -->
+            <div class="hero-banner">
+                <div class="hero-content">
+                    <h1>Next-Gen Shopping is Here</h1>
+                    <p>Experience AI-powered AR try-ons, intelligent search, and personalized recommendations.</p>
+                    <button class="btn-primary" style="width:auto; padding: 10px 30px;" onclick="document.getElementById('ai-input').focus()">Try AI Search</button>
+                </div>
+            </div>
+
+            <!-- AI SUGGESTION FEATURE -->
+            <div class="ai-hero">
+                <h2>Ask the AI Shopping Assistant</h2>
+                <p>Try natural language: "₹10,000 me best phone for gaming" or "mood off hai"</p>
+                <div class="ai-search-box">
+                    <input type="text" id="ai-input" placeholder="Describe what you are looking for...">
+                    <button class="mic-btn" style="color:var(--dark);" onclick="startVoiceSearch('ai-input')" title="Voice Search">🎤</button>
+                    <button class="ask-btn" onclick="handleAskAI()">Ask AI ✨</button>
+                </div>
+            </div>
+
+            <!-- Search Results Container -->
+            <div id="search-results-container" style="display:none; margin-bottom: 30px;">
+                <h2 class="section-title" id="search-results-title">🔍 Search Results</h2>
+                <div class="products-grid" id="search-grid"></div>
+            </div>
+
+            <h2 class="section-title">⭐ Personalized For You</h2>
+            <div class="products-grid" id="recommended-grid"></div>
+
+            <h2 class="section-title">🔥 Trending Products</h2>
+            <div class="products-grid" id="trending-grid"></div>
+
+            <h2 class="section-title" id="recent-title" style="display:none;">👁️ Recently Viewed</h2>
+            <div class="products-grid" id="recent-grid"></div>
+        </div>
+
+        <!-- ================= PRODUCT DETAIL VIEW ================= -->
+        <div id="view-product" style="display:none;">
+            <div class="breadcrumb" onclick="showView('home')">← Back to Home</div>
+            <div class="pd-layout" id="pd-content">
+                <!-- Dynamically Rendered via JS -->
+            </div>
+            
+            <!-- Reviews Section -->
+            <div class="reviews-section" id="reviews-section">
+                <h3>Customer Reviews</h3>
+                <div class="review-card">
+                    <div class="review-header"><strong>Alex Johnson</strong> <span style="color:#ffa41c">⭐⭐⭐⭐⭐</span></div>
+                    <p>"Absolutely amazing product. The AI try-on feature was mind-blowing and helped me make the right choice!"</p>
+                </div>
+                <div class="review-card">
+                    <div class="review-header"><strong>Sarah M.</strong> <span style="color:#ffa41c">⭐⭐⭐⭐</span></div>
+                    <p>"Very good quality. Arrived fast. The social recommendation from my friends convinced me to buy."</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= CHECKOUT VIEW ================= -->
+        <div id="view-checkout" style="display:none;">
+            <div class="breadcrumb" onclick="showView('home')">← Back to Shopping</div>
+            <h2 class="section-title">Checkout & Order Summary</h2>
+            <div class="checkout-layout">
+                <div class="checkout-details">
+                    <div class="checkout-card">
+                        <h3>1. Shipping Address</h3>
+                        <p id="checkout-address">123 Main St, New Delhi, India</p>
+                        <button class="btn-secondary" style="width:auto; font-size:0.8rem; padding:5px 15px;" onclick="editAddress()">Change</button>
+                    </div>
+                    <div class="checkout-card">
+                        <h3>2. Payment Method</h3>
+                        <div class="payment-options" style="margin-top:10px;">
+                            <label style="display:block; margin-bottom:8px;"><input type="radio" name="pay" checked> UPI (Google Pay/PhonePe)</label>
+                            <label style="display:block; margin-bottom:8px;"><input type="radio" name="pay"> Credit or Debit Card</label>
+                            <label style="display:block; margin-bottom:8px;"><input type="radio" name="pay"> Net Banking</label>
+                            <label style="display:block; margin-bottom:8px;"><input type="radio" name="pay"> Cash on Delivery</label>
+                        </div>
+                    </div>
+                    <div class="checkout-card">
+                        <h3>3. Review Items</h3>
+                        <div id="checkout-items-list"></div>
+                    </div>
+                </div>
+                <div class="checkout-summary-box">
+                    <button class="btn-primary" onclick="placeOrder()">Place Your Order</button>
+                    <p style="font-size:0.75rem; color:var(--gray); text-align:center; margin-bottom:15px;">By placing your order, you agree to KARTZONE's privacy notice and conditions of use.</p>
+                    <div class="summary-line" style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Items:</span> <span id="summary-subtotal">₹0</span></div>
+                    <div class="summary-line" style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Delivery:</span> <span>₹40</span></div>
+                    <div class="summary-line" style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Total Promotion:</span> <span style="color:var(--danger)">-₹40</span></div>
+                    <hr style="margin:10px 0; border:0; border-top:1px solid #ddd;">
+                    <div class="summary-total" style="display:flex; justify-content:space-between; font-size:1.2rem; font-weight:bold; color:var(--danger);"><span>Order Total:</span> <span id="summary-total">₹0</span></div>
+                    <div style="background:#f0f2f2; padding:10px; border-radius:8px; font-size:0.85rem; margin-top:15px; border: 1px solid #ddd;">
+                        <strong>💡 AI Savings Tip:</strong> This is the lowest price in 30 days!
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= MY ORDERS VIEW ================= -->
+        <div id="view-orders" style="display:none;">
+            <div class="breadcrumb" onclick="showView('home')">← Back to Shopping</div>
+            <h2 class="section-title">Your Orders</h2>
+            <div id="orders-container" class="orders-list">
+                <!-- Orders will be rendered here -->
+                <p style="color:var(--gray); text-align:center; padding:40px;">You haven't placed any orders yet.</p>
+            </div>
+        </div>
+
+        <!-- ================= MY ORDERS VIEW ================= -->
+        <div id="view-orders" style="display:none;">
+            <div class="breadcrumb" onclick="showView('home')">← Back to Shopping</div>
+            <h2 class="section-title">Your Orders</h2>
+            <div id="orders-container" class="orders-list">
+                <p style="color:var(--gray); text-align:center; padding:40px;">You haven't placed any orders yet.</p>
+            </div>
+        </div>
+
+        <!-- ================= PROFILE VIEW ================= -->
+        <div id="view-profile" style="display:none;">
+            <div class="breadcrumb" onclick="showView('home')">← Back to Shopping</div>
+            <h2 class="section-title">Your Account</h2>
+            <div class="checkout-card" style="max-width:500px; margin: 20px auto;">
+                <div style="text-align:center; margin-bottom:20px;">
+                    <div style="font-size:4rem; margin-bottom:10px;">👤</div>
+                    <h3 id="profile-name">User Name</h3>
+                    <p id="profile-email" style="color:var(--gray);">user@example.com</p>
+                </div>
+                <hr style="margin:20px 0; border:0; border-top:1px solid #eee;">
+                <button class="btn-secondary" onclick="logoutUser()">Sign Out of KARTZONE</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ================= FOOTER ================= -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-col">
+                <h3>Get to Know Us</h3>
+                <ul>
+                    <li><a href="#">About KARTZONE</a></li>
+                    <li><a href="#">Careers</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h3>Make Money with Us</h3>
+                <ul>
+                    <li><a href="#">Sell on KARTZONE</a></li>
+                    <li><a href="#">Become an Affiliate</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h3>Let Us Help You</h3>
+                <ul>
+                    <li><a href="#">Your Account</a></li>
+                    <li><a href="#">Returns & Replacements</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            &copy; 2026 KARTZONE. All rights reserved.
+        </div>
+    </footer>
+
+    <!-- ================= MODALS & OVERLAYS ================= -->
+    <div class="overlay" id="main-overlay" onclick="closeAllModals()"></div>
+
+    <!-- CART SIDEBAR -->
+    <div class="cart-drawer" id="cart-drawer">
+        <div class="cart-header">
+            <h2>Shopping Cart</h2>
+            <button class="close-btn" onclick="toggleCart()">×</button>
+        </div>
+        <div class="cart-items" id="cart-items"></div>
+        <div class="cart-footer">
+            <div class="cart-total">
+                <span>Total:</span>
+                <span id="cart-total-price">$0.00</span>
+            </div>
+            <button class="btn-primary" onclick="checkout()">Proceed to Checkout</button>
+        </div>
+    </div>
+
+    <!-- AUTH MODAL -->
+    <div class="auth-modal" id="auth-modal">
+        <button class="close-btn" onclick="closeAllModals()" style="position: absolute; top: 15px; right: 20px;">×</button>
+        <h2 id="auth-title">Sign-In</h2>
+        <div class="auth-error" id="auth-error"></div>
+        <form id="auth-form">
+            <div class="form-group" id="auth-name-group" style="display:none;">
+                <label>Name</label>
+                <input type="text" id="auth-name" placeholder="First and last name">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="auth-email" required placeholder="Enter your email">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="auth-password" required minlength="4" placeholder="At least 6 characters">
+                <div style="text-align:right; margin-top:5px;">
+                    <a href="#" style="font-size:0.8rem; color:var(--accent);" onclick="showToast('Password reset link sent to email!')">Forgot password?</a>
+                </div>
+            </div>
+            <div style="margin-bottom:15px; font-size:0.85rem;">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox"> Keep me signed in
+                </label>
+            </div>
+            <button type="submit" class="btn-primary" id="auth-submit-btn">Login</button>
+            <div style="margin-top:10px; display:flex; align-items:center; gap:10px;">
+                <hr style="flex-grow:1; border:0; border-top:1px solid #eee;">
+                <span style="font-size:0.75rem; color:var(--gray);">OR</span>
+                <hr style="flex-grow:1; border:0; border-top:1px solid #eee;">
+            </div>
+            <button type="button" class="btn-secondary" style="margin-top:10px;" onclick="demoLogin()">Login with Demo Account</button>
+        </form>
+        <div style="margin-top:15px; text-align:center; font-size:0.9rem;">
+            <a href="#" onclick="toggleAuthMode()" id="auth-toggle-link" style="color:var(--accent);">Create your account</a>
+        </div>
+    </div>
+
+    <!-- AI TRY-BEFORE-BUY MODAL -->
+    <div class="ai-modal" id="ai-modal">
+        <h2>AI Try-Before-Buy Preview</h2>
+        <p style="color:var(--gray); font-size:0.9rem; margin-bottom:15px;">See how this product looks on you using our simulated AR tech.</p>
+        
+        <div style="display:flex; gap:10px; justify-content:center; margin-bottom: 10px;">
+            <button class="btn-primary" style="width:auto;" onclick="startWebcam()">📷 Use Webcam</button>
+            <input type="file" id="ai-upload-input" accept="image/*" style="display:none;" onchange="handleImageUpload(event)">
+            <button class="btn-secondary" style="width:auto;" onclick="document.getElementById('ai-upload-input').click()">📁 Upload Photo</button>
+        </div>
+        
+        <div class="ai-canvas-container">
+            <div class="ai-label">AI Preview – For Visualization Only</div>
+            <video id="webcam-video" autoplay playsinline muted></video>
+            <img id="user-uploaded-img" src="" style="display:none; width:100%; height:100%; object-fit:cover;">
+            <img id="ai-overlay-img" src="" alt="Overlay">
+        </div>
+        <button class="btn-primary" onclick="closeAllModals()">Close</button>
+    </div>
+
+    <!-- ================= FLOATING AI CHATBOT ================= -->
+    <div class="chatbot-btn" onclick="toggleChatbot()">🤖 Chat with AI</div>
+    <div class="chatbot-window" id="chatbot-window">
+        <div class="chatbot-header">
+            <h3>AI Shopping Assistant</h3>
+            <button onclick="toggleChatbot()">×</button>
+        </div>
+        <div class="chatbot-body" id="chatbot-messages">
+            <div class="bot-msg">Hi! I am your Smart AI Assistant. What can I help you find today?</div>
+        </div>
+        <div class="chatbot-input">
+            <input type="text" id="chat-input" placeholder="Type a message..." onkeypress="handleChatKeyPress(event)">
+            <button onclick="sendChatMessage()">➤</button>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div class="toast" id="toast">Message</div>
+
+    <script src="app.js"></script>
+</body>
+</html>

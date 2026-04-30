@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Tasks</title>
+    <meta name="description" content="A beautiful and dynamic to-do list application.">
+    <!-- Using Outfit font for a more modern, premium look -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dark-theme">
+    <div class="theme-switch-wrapper">
+        <label class="theme-switch" for="theme-checkbox">
+            <input type="checkbox" id="theme-checkbox" />
+            <div class="slider round">
+                <i class="fa-solid fa-sun sun-icon"></i>
+                <i class="fa-solid fa-moon moon-icon"></i>
+            </div>
+        </label>
+    </div>
+
+    <main class="app-container">
+        <header>
+            <h1>Tasks <i class="fa-solid fa-check-double"></i></h1>
+        </header>
+
+        <form id="todo-form">
+            <div class="input-group">
+                <input type="text" id="todo-input" placeholder="What needs to be done?" autocomplete="off" required>
+                <button type="submit" id="add-btn" aria-label="Add task"><i class="fa-solid fa-plus"></i></button>
+            </div>
+        </form>
+
+        <nav class="filters" aria-label="Task filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="active">Active</button>
+            <button class="filter-btn" data-filter="completed">Completed</button>
+        </nav>
+
+        <section class="todo-list-container" aria-label="Task list">
+            <ul id="todo-list">
+                <!-- Tasks will be injected here by JavaScript -->
+            </ul>
+            <div id="empty-state" class="empty-state hidden">
+                <i class="fa-regular fa-clipboard"></i>
+                <p>No tasks found. Time to relax!</p>
+            </div>
+        </section>
+
+        <footer>
+            <span id="items-left">0 items left</span>
+            <button id="clear-completed">Clear completed</button>
+        </footer>
+    </main>
+    
+    <!-- Toast Notifications Container -->
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

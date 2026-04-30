@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>KARTZONE – AI Shopping</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{font-family:'Inter',sans-serif;}
+.glass{background:rgba(255,255,255,0.7);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.2);}
+.glass-dark{background:rgba(19,25,33,0.85);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);}
+.ai-card{background:linear-gradient(135deg,rgba(99,102,241,0.05) 0%,rgba(236,72,153,0.05) 100%);border:1px solid rgba(99,102,241,0.2);}
+.lc2{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;}
+.lc1{overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;line-clamp:1;-webkit-box-orient:vertical;}
+.card{transition:transform .2s ease,box-shadow .2s ease;will-change:transform;}
+.card:hover{transform:translateY(-4px);box-shadow:0 12px 30px rgba(0,0,0,.12);}
+.btn-orange{background:#f97316;color:#fff;font-weight:700;border-radius:10px;transition:background .2s,transform .1s;}
+.btn-orange:hover{background:#ea6c0a;}
+.btn-orange:active{transform:scale(.97);}
+.toast{position:fixed;bottom:24px;right:24px;background:#1e293b;color:#fff;padding:14px 22px;border-radius:12px;font-weight:600;z-index:9999;animation:slideIn .3s ease;}
+@keyframes slideIn{from{transform:translateX(120px);opacity:0}to{transform:translateX(0);opacity:1}}
+.spinner{width:40px;height:40px;border:4px solid #f3f3f3;border-top:4px solid #f97316;border-radius:50%;animation:spin .8s linear infinite;margin:60px auto;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ai-gradient{background:linear-gradient(135deg,#6366f1 0%,#a855f7 50%,#ec4899 100%);}
+.ai-button{background:rgba(255,255,255,0.1);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.2);transition:all 0.3s ease;}
+.ai-button:hover{background:rgba(255,255,255,0.2);transform:scale(1.05);}
+.chat-bubble{position:fixed;bottom:30px;right:30px;z-index:1000;display:flex;align-items:center;gap:10px;padding:12px 24px;border-radius:50px;color:white;font-weight:700;box-shadow:0 10px 25px rgba(99,102,241,0.4);transition:all 0.3s ease;cursor:pointer;}
+.chat-bubble:hover{transform:translateY(-5px);box-shadow:0 15px 30px rgba(99,102,241,0.6);}
+.chat-sidebar { position: fixed; top: 0; right: -400px; width: 380px; height: 100%; background: white; z-index: 10000; transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: -10px 0 30px rgba(0,0,0,0.1); border-left: 1px solid #e2e8f0; }
+.chat-sidebar.open { right: 0; }
+.chat-msg { padding: 10px 14px; border-radius: 14px; max-width: 85%; font-size: 13px; margin-bottom: 8px; }
+.chat-msg-ai { background: #f1f5f9; align-self: flex-start; color: #1e293b; }
+.chat-msg-user { background: #f97316; align-self: flex-end; color: white; margin-left: auto; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+<div id="root"></div>
+<div id="toast" style="display:none" class="toast"></div>
+
+<script>
+const API = 'http://localhost:3000';
+let state = {
+  user: JSON.parse(localStorage.getItem('kz_user')||'null'),
+  cart: [],
+  view: 'home',
+  products: [],
+  orders: [],
+  selectedId: null,
+  loading: false,
+  recentlyViewed: JSON.parse(localStorage.getItem('kz_recent') || '[]'),
+  analytics: null,
+  page: 1,
+  totalPages: 1,
+  currentCategory: 'All',
+  searchQuery: '',
+  sortOrder: 'default',
+  totalProducts: 0,
+  showChat: false,
+  chatMessages: [{ role: 'ai', text: 'Hello! I am your KartZone AI. How can I help you shop today? 🤖' }]
+};
+
+function toast(msg,ok=true){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.style.background=ok?'#1e293b':'#dc2626';
+  t.style.display='block';
+  setTimeout(()=>t.style.display='none',3000);
+}
+
+function headers(){
+  const h={'Content-Type':'application/json'};
+  if(state.user?.token) h['Authorization']='Bearer '+state.user.token;
+  return h;
+}
+
+async function api(method,url,body){
+  const r=await fetch(API+url,{method,headers:headers(),body:body?JSON.stringify(body):undefined});
+  const d=await r.json();
+  if(!r.ok) throw new Error(d.message||'Error');
+  return d;
+}
+
+async function loadProducts(){
+  state.loading=true;render();
+  try{
+    let q = `/api/products?page=${state.page}&q=${state.searchQuery}&sort=${state.sortOrder}`;
+    if(state.currentCategory === 'Offers') q += '&minDiscount=20';
+    else if(state.currentCategory !== 'All') q += `&category=${state.currentCategory}`;
+    
+    const d=await api('GET', q);
+    state.products = d.products;
+    state.totalPages = d.pages;
+    state.totalProducts = d.total;
+    state.offline = false;
+  }
+  catch(e){
+    state.offline = true;
+    toast('Backend Offline. Please start MongoDB & Server.',false);
+  }
+  state.loading=false;render();
+}
+
+async function loadOrders(){
+  if(!state.user) return;
+  try{state.orders=await api('GET','/api/orders');}
+  catch(e){state.orders=[];}
+}
+
+async function login(email,password){
+  const d=await api('POST','/api/auth/login',{email,password});
+  state.user=d;localStorage.setItem('kz_user',JSON.stringify(d));
+  state.cart=await api('GET','/api/cart').catch(()=>[]);
+  toast('Welcome back, '+d.user.name+'! 👋');
+  setView('home');
+}
+
+async function signup(name,email,password){
+  const d=await api('POST','/api/auth/signup',{name,email,password});
+  state.user=d;localStorage.setItem('kz_user',JSON.stringify(d));
+  state.cart=[];
+  toast('Account created! Welcome '+name+' 🎉');
+  setView('home');
+}
+
+function logout(){
+  state.user=null;state.cart=[];state.orders=[];
+  localStorage.removeItem('kz_user');
+  toast('Logged out');setView('home');
+}
+
+async function addToCart(product){
+  if(!state.user){toast('Please sign in first',false);setView('login');return;}
+  try{
+    state.cart=await api('POST','/api/cart',{productId:product.id,qty:1});
+    toast(product.name.substring(0,30)+'... added to cart 🛒');
+    render();
+  }catch(e){toast(e.message,false);}
+}
+
+async function removeFromCart(productId){
+  try{
+    state.cart=await api('DELETE','/api/cart/'+productId);
+    render();
+  }catch(e){toast(e.message,false);}
+}
+
+async function placeOrder(){
+  if(!state.user){toast('Please sign in',false);setView('login');return;}
+  const total=state.cart.reduce((s,i)=>s+i.price*(i.qty||1),0);
+  try{
+    await api('POST','/api/orders',{items:state.cart,total});
+    state.cart=[];
+    toast('Order placed successfully! 🎉');
+    await loadOrders();
+    setView('orders');
+  }catch(e){toast(e.message,false);}
+}
+
+function setView(v){state.view=v;if(v==='orders')loadOrders();render();}
+
+function cartCount(){return state.cart.reduce((s,i)=>s+(i.qty||1),0);}
+
+// ── Render ─────────────────────────────────────────────────
+function render(){
+  if(state.view==='product'){
+    const p=state.products.find(x=>x._id===state.selectedId) || state.recentlyViewed.find(x=>x._id===state.selectedId);
+    if(p && !state.recentlyViewed.find(x=>x._id===p._id)){
+      state.recentlyViewed.unshift(p);
+      if(state.recentlyViewed.length > 10) state.recentlyViewed.pop();
+    }
+  }
+  document.getElementById('root').innerHTML = `
+    ${navbar()}
+    <main class="container mx-auto px-4 pb-16">
+      ${state.view==='home'?homeView():''}
+      ${state.view==='product'?productView():''}
+      ${state.view==='login'?authView('login'):''}
+      ${state.view==='signup'?authView('signup'):''}
+      ${state.view==='cart'?cartView():''}
+      ${state.view==='orders'?ordersView():''}
+      ${state.view==='admin'?adminView():''}
+      ${state.view==='checkout'?checkoutView():''}
+      ${state.view==='profile'?profileView():''}
+    </main>
+    ${aiChatSidebar()}
+    <div id="ai-chat-btn" class="chat-bubble ai-gradient">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+      <span>AI Assistant</span>
+    </div>
+    ${state.view==='home' && state.recentlyViewed.length ? `
+      <div class="container mx-auto px-4 py-8 border-t border-gray-200">
+        <h3 class="text-xl font-bold mb-6">Recently Viewed</h3>
+        <div class="flex gap-4 overflow-x-auto pb-4">
+          ${state.recentlyViewed.map(p => `
+            <div class="w-32 shrink-0 cursor-pointer group" onclick="state.selectedId='${p._id}';setView('product')">
+              <div class="h-32 bg-white rounded-lg border border-gray-100 overflow-hidden mb-2">
+                <img src="${p.image}" class="w-full h-full object-cover group-hover:scale-110 transition"/>
+              </div>
+              <p class="text-xs font-semibold lc1">${p.name}</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>` : ''}
+  `;
+  
+  if(state.view === 'product') {
+    const p = state.products.find(x => x._id === state.selectedId) || state.recentlyViewed.find(x => x._id === state.selectedId);
+    if(p && p.priceHistory) setTimeout(() => renderPriceChart(p.priceHistory), 50);
+  }
+  
+  // Bind all events AFTER setting innerHTML
+  bindEvents();
+}
+
+function navbar(){
+  const cnt=cartCount();
+  return `
+  <header class="sticky top-0 z-50 shadow-2xl">
+    <!-- Top Navigation Row -->
+    <nav class="bg-[#131921] text-white border-b border-gray-800">
+      <div class="container mx-auto px-4 py-2 flex items-center justify-between">
+        
+        <!-- LEFT: Login / Account & Lists -->
+        <div class="flex items-center gap-6">
+          <button id="nav-profile" class="group flex flex-col items-start leading-tight">
+            <span class="text-[10px] text-gray-400 font-medium">Hello, ${state.user ? state.user.user.name : 'sign in'}</span>
+            <div class="flex items-center gap-1">
+              <span class="text-sm font-bold group-hover:text-orange-400 transition">${state.user ? 'Your Account' : 'Login / Sign In'}</span>
+              <svg class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+            </div>
+          </button>
+          ${state.user && state.user.user.role === 'admin' ? `
+            <button id="nav-admin" class="text-xs font-bold text-orange-400 bg-orange-400/10 px-3 py-1.5 rounded-full hover:bg-orange-400/20 transition">
+              Admin Panel
+            </button>` : ''}
+          ${state.user ? `
+            <button id="nav-logout" class="text-[10px] uppercase tracking-wider text-red-400 hover:text-red-300 font-bold border border-red-900/50 px-2 py-1 rounded transition">
+              Logout
+            </button>` : ''}
+        </div>
+
+        <!-- RIGHT: Logo, Returns/Orders, Cart -->
+        <div class="flex items-center gap-4 md:gap-8">
+          <!-- Returns & Orders -->
+          <div class="hidden sm:flex flex-col items-end leading-tight cursor-pointer hover:text-orange-400 transition" onclick="setView('orders')">
+            <span class="text-[10px] text-gray-400 font-medium">Returns</span>
+            <span class="text-sm font-bold">& Orders</span>
+          </div>
+          
+          <!-- Cart -->
+          <button id="nav-cart" class="flex items-end gap-1 relative group">
+            <div class="relative">
+              <svg class="w-8 h-8 group-hover:text-orange-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.4 7h12.8M10 21a1 1 0 1 0 2 0 1 1 0 0 0-2 0zm7 0a1 1 0 1 0 2 0 1 1 0 0 0-2 0z"/></svg>
+              ${cnt > 0 ? `<span class="absolute -top-1.5 -right-1.5 bg-orange-400 text-black text-[10px] font-black rounded-full w-5 h-5 flex items-center justify-center border-2 border-[#131921]">${cnt}</span>` : ''}
+            </div>
+            <span class="hidden md:block text-sm font-bold self-end mb-1 group-hover:text-orange-400 transition">Cart</span>
+          </button>
+
+          <!-- Logo -->
+          <button id="nav-home" class="text-2xl font-black shrink-0 hover:scale-105 transition flex flex-col items-center">
+            <div class="leading-none tracking-tighter">KART<span class="text-orange-400">ZONE</span></div>
+            <div class="text-[8px] font-medium text-gray-400 tracking-[0.2em] -mt-1">PREMIUM AI STORE</div>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Bottom Row: Full-width Search Bar -->
+    <div class="bg-[#232f3e] border-b border-gray-700 py-2.5">
+      <div class="container mx-auto px-4">
+        <div class="flex items-center bg-white rounded-md overflow-hidden focus-within:ring-2 ring-orange-400 transition-all shadow-lg">
+          <select class="hidden md:block bg-gray-100 px-3 py-2.5 text-xs text-slate-600 border-r border-gray-300 outline-none cursor-pointer hover:bg-gray-200">
+            <option>Electronics</option>
+            <option>Mobiles</option>
+            <option>Laptops</option>
+            <option>Fashion</option>
+            <option>Home Appliances</option>
+          </select>
+          <input id="search-input" type="text" placeholder="Search for premium products, AI insights and more..." class="flex-1 px-4 py-2.5 text-slate-900 text-base outline-none placeholder:text-slate-400"/>
+          <button id="search-btn" class="bg-orange-400 px-7 py-2.5 hover:bg-orange-500 text-[#131921] flex items-center justify-center transition-all group">
+            <svg class="w-6 h-6 transform group-hover:scale-110 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="2.5"/><path d="m21 21-4.35-4.35" stroke-linecap="round" stroke-width="2.5"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>`;
+}
+
+function homeView(){
+  if(state.loading) return '<div class="spinner mt-20"></div>';
+  if(state.offline) return `
+    <div class="text-center py-20 bg-red-50 rounded-3xl border border-red-100 mt-10">
+      <div class="text-6xl mb-4">🔌</div>
+      <p class="text-xl font-bold text-red-800 mb-2">Backend Offline</p>
+      <p class="text-sm text-red-600 mb-6">Make sure MongoDB is running and you have started the server with 'node server.js'.</p>
+      <button onclick="loadProducts()" class="bg-red-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-red-700 transition">Try Reconnecting</button>
+    </div>`;
+  if(!state.products.length && !state.loading) return `
+    <div class="text-center py-20 bg-white rounded-3xl shadow-xl mt-10">
+      <div class="text-6xl mb-4">🔍</div>
+      <p class="text-xl font-bold text-slate-800 mb-2">No products found</p>
+      <p class="text-sm text-slate-400 mb-6">Try adjusting your search or category filters.</p>
+      <button id="retry-btn" class="btn-orange px-8 py-3">Retry / Reset Filters</button>
+    </div>`;
+
+  return `
+    <div class="py-6">
+      <!-- Categories Bar -->
+      <div class="flex gap-3 overflow-x-auto pb-4 mb-6 no-scrollbar">
+        ${['All', 'Offers', 'Electronics', 'Mobiles', 'Laptops', 'Home Appliances', 'Fashion', 'Trending', 'Stationery'].map(c => `
+          <button class="cat-btn px-6 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all ${state.currentCategory===c ? 'bg-[#131921] text-white shadow-lg' : 'bg-white text-slate-600 border border-slate-200 hover:border-orange-400'}" data-cat="${c}">
+            ${c === 'Offers' ? '🔥 Top Offers' : c === 'Trending' ? '✨ Trending' : c}
+          </button>
+        `).join('')}
+      </div>
+
+      <!-- Hero & Search -->
+      ${state.page === 1 && !state.searchQuery ? `
+        <!-- AI Assistant Section (Glassmorphism) -->
+      <div class="glass-dark rounded-3xl p-8 md:p-12 mb-12 text-white relative overflow-hidden">
+        <div class="relative z-10 max-w-3xl mx-auto text-center">
+          <h2 class="text-3xl md:text-5xl font-black mb-4 tracking-tight">Smart AI Shopping Advisor</h2>
+          <p class="text-slate-300 mb-8 text-lg">Type your needs, and I'll find the best products with proof.</p>
+          <div class="flex bg-white/10 p-2 rounded-2xl border border-white/20 focus-within:border-orange-400 transition-all">
+            <input type="text" id="ai-advisor-input" placeholder="e.g. 'Best gaming laptop under ₹80,000'" class="flex-1 bg-transparent px-6 py-4 text-white text-lg outline-none placeholder:text-slate-500"/>
+            <button id="ai-advisor-btn" class="bg-orange-400 px-8 py-4 rounded-xl font-bold text-black hover:bg-orange-500 transition">Ask AI Advisor</button>
+          </div>
+          <div id="ai-recommendations" class="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6 hidden">
+            <!-- AI Cards will appear here -->
+          </div>
+        </div>
+        <div class="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+          <svg class="w-80 h-80" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+      </div>
+        <div class="relative bg-gradient-to-br from-[#131921] to-[#232f3e] rounded-3xl overflow-hidden mb-10 shadow-2xl p-10 md:p-16 text-white">
+          <div class="max-w-2xl">
+            <p class="text-orange-400 font-bold uppercase tracking-widest text-sm mb-4">Limited Time Offers</p>
+            <h1 class="text-5xl md:text-6xl font-black mb-6 leading-tight">Smart Shopping,<br/>Powered by AI.</h1>
+            <p class="text-slate-300 text-lg mb-8">Discover over 10,000+ premium products with AI price insights and instant recommendations.</p>
+            <button class="bg-white text-black px-10 py-4 rounded-full font-bold hover:bg-orange-400 hover:text-white transition transform hover:scale-105 shadow-xl">
+              Shop Now
+            </button>
+          </div>
+          <div class="absolute right-[-10%] top-0 opacity-10 pointer-events-none">
+            <svg class="w-96 h-96" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Sort & Stats -->
+      <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
+        <p class="text-slate-500 font-medium">Showing <span class="text-slate-900 font-bold">${state.products.length}</span> of <span class="text-slate-900 font-bold">${state.totalProducts}</span> products</p>
+        <div class="flex gap-2">
+          <select id="sort-select" class="bg-white border p-2 rounded-lg text-sm font-bold outline-none focus:ring-2 ring-orange-400">
+            <option value="default" ${state.sortOrder==='default'?'selected':''}>Sort: Featured</option>
+            <option value="price_asc" ${state.sortOrder==='price_asc'?'selected':''}>Price: Low to High</option>
+            <option value="price_desc" ${state.sortOrder==='price_desc'?'selected':''}>Price: High to Low</option>
+            <option value="rating" ${state.sortOrder==='rating'?'selected':''}>Avg. Rating</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-12">
+        ${state.products.map(p => `
+          <div class="card bg-white rounded-2xl border border-slate-100 overflow-hidden flex flex-col relative" data-pid="${p._id}">
+            ${p.discount > 20 ? `<span class="absolute top-3 left-3 bg-red-500 text-white text-[10px] font-black px-2 py-1 rounded-md z-10">-${p.discount}% OFF</span>` : ''}
+            <div class="h-52 overflow-hidden bg-slate-50 cursor-pointer product-card-img" data-pid="${p._id}">
+              <img src="${p.image}" loading="lazy" alt="${p.name}" class="w-full h-full object-cover hover:scale-110 transition duration-500"/>
+            </div>
+            <div class="p-5 flex flex-col flex-1">
+              <div class="flex justify-between items-start mb-1">
+                <span class="text-[10px] font-bold text-orange-500 uppercase tracking-tighter">${p.category}</span>
+                <span class="text-[10px] font-bold text-slate-400">Stock: ${p.stock}</span>
+              </div>
+              <h3 class="font-bold text-sm text-slate-800 lc2 mb-3 cursor-pointer product-name h-10" data-pid="${p._id}">${p.name}</h3>
+              <div class="flex items-center gap-1 text-orange-400 text-xs mb-3 font-bold">
+                ${"⭐".repeat(Math.round(p.rating))} <span class="text-slate-400 text-[10px] ml-1">(${p.rating})</span>
+              </div>
+              <div class="flex items-baseline gap-2 mb-4">
+                <span class="text-xl font-black text-slate-900">₹${p.price.toLocaleString('en-IN')}</span>
+                ${p.discount ? `<span class="text-xs text-slate-400 line-through">₹${Math.round(p.price * 1.3).toLocaleString('en-IN')}</span>` : ''}
+              </div>
+              <button class="btn-orange w-full py-2.5 text-sm add-to-cart" data-pid="${p._id}">Add to Cart</button>
+            </div>
+          </div>`).join('')}
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex justify-center items-center gap-4 py-8">
+        <button id="prev-page" class="p-3 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition" ${state.page===1?'disabled':''}>
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-width="2.5" stroke-linecap="round"/></svg>
+        </button>
+        <span class="font-bold text-slate-600">Page <span class="text-slate-900">${state.page}</span> of <span class="text-slate-900">${state.totalPages}</span></span>
+        <button id="next-page" class="p-3 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition" ${state.page===state.totalPages?'disabled':''}>
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="2.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>`;
+}
+
+function productView(){
+  const p=state.products.find(x=>x._id===state.selectedId);
+  if(!p) return '<div class="py-20 text-center">Product not found.</div>';
+  return `
+    <div class="py-6 max-w-6xl mx-auto">
+      <button id="back-home" class="mb-6 text-slate-500 hover:text-slate-900 font-semibold flex items-center gap-2">← Back</button>
+      <div class="bg-white rounded-2xl shadow-lg p-8 flex flex-col md:flex-row gap-10">
+        <div class="flex-1 bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center h-80">
+          <img src="${p.image}" loading="lazy" alt="${p.name}" class="w-full h-full object-cover"/>
+        </div>
+        <div class="flex-1 space-y-4">
+          <h1 class="text-2xl font-black">${p.name}</h1>
+          <div class="flex items-center gap-4">
+            <div class="text-orange-400 font-bold">⭐⭐⭐⭐⭐ ${p.rating}</div>
+            <div class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-black">AI Trust Score: ${p.trustScore}%</div>
+          </div>
+          <div class="flex items-baseline gap-4">
+            <div class="text-4xl font-black">₹${p.price.toLocaleString('en-IN')}</div>
+            <div class="text-sm font-bold ${p.pricePrediction==='Buy Now'?'text-green-600':'text-orange-600'}">💡 AI Insight: ${p.pricePrediction}</div>
+          </div>
+          
+          <!-- Price History Chart -->
+          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+            <h4 class="text-xs font-bold text-slate-400 uppercase mb-4">Price History (Last 6 Months)</h4>
+            <canvas id="priceChart" height="100"></canvas>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-green-50 p-4 rounded-xl border border-green-100">
+              <h4 class="font-bold text-green-800 text-sm mb-2">✅ Pros</h4>
+              <ul class="text-[10px] text-green-700 list-disc list-inside">${(p.reviewSummary?.pros||[]).map(s=>`<li>${s}</li>`).join('')}</ul>
+            </div>
+            <div class="bg-red-50 p-4 rounded-xl border border-red-100">
+              <h4 class="font-bold text-red-800 text-sm mb-2">❌ Cons</h4>
+              <ul class="text-[10px] text-red-700 list-disc list-inside">${(p.reviewSummary?.cons||[]).map(s=>`<li>${s}</li>`).join('')}</ul>
+            </div>
+          </div>
+
+          <!-- Group Decision Tool -->
+          <div class="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
+            <div class="flex justify-between items-center mb-4">
+              <h4 class="font-bold text-indigo-900 text-sm">👥 Group Decision Tool</h4>
+              <span class="text-[10px] font-black text-indigo-400 uppercase">AI Consensus</span>
+            </div>
+            <p class="text-xs text-indigo-700 mb-4 italic">"Should I buy this?" — Vote to see what the community thinks.</p>
+            <div class="flex gap-4 mb-4">
+              <button class="vote-btn flex-1 bg-white border border-indigo-200 py-2 rounded-lg font-bold text-indigo-600 hover:bg-indigo-600 hover:text-white transition" data-vote="yes" data-pid="${p._id}">👍 Buy (${p.votes?.yes||0})</button>
+              <button class="vote-btn flex-1 bg-white border border-indigo-200 py-2 rounded-lg font-bold text-slate-500 hover:bg-slate-600 hover:text-white transition" data-vote="no" data-pid="${p._id}">👎 Pass (${p.votes?.no||0})</button>
+            </div>
+            <div class="h-2 w-full bg-slate-200 rounded-full overflow-hidden flex">
+              <div class="h-full bg-indigo-500" style="width: ${((p.votes?.yes||0)/((p.votes?.yes||0)+(p.votes?.no||1))*100)}%"></div>
+            </div>
+          </div>
+
+          <button class="btn-orange w-full py-4 text-lg add-to-cart" data-pid="${p._id}">Add to Cart</button>
+        </div>
+      </div>
+      <div class="mt-12 bg-white rounded-2xl shadow-lg p-8">
+        <h3 class="text-2xl font-bold mb-6">Customer Reviews</h3>
+        ${p.reviews?.length ? p.reviews.map(r => `
+          <div class="border-b border-gray-100 py-4 last:border-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-bold text-slate-800">${r.user}</span>
+              <span class="text-orange-400 text-xs">${"⭐".repeat(r.rating)}</span>
+            </div>
+            <p class="text-slate-600">${r.comment}</p>
+            <span class="text-[10px] text-gray-400">${new Date(r.date).toLocaleDateString()}</span>
+          </div>
+        `).join('') : '<p class="text-slate-400 italic">No reviews yet. Be the first to review!</p>'}
+      </div>
+    </div>`;
+}
+
+function authView(type){
+  return `
+    <div class="max-w-md mx-auto mt-16 bg-white p-8 rounded-2xl shadow-xl">
+      <h2 class="text-2xl font-black mb-6">${type==='login'?'Sign In to KARTZONE':'Create Account'}</h2>
+      <div id="auth-error" class="hidden bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm border border-red-100"></div>
+      <form id="auth-form" class="space-y-4">
+        ${type==='signup'?`<div>
+          <label class="block text-sm font-semibold mb-1">Full Name</label>
+          <input id="auth-name" type="text" required placeholder="John Doe" class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+        </div>`:''}
+        <div>
+          <label class="block text-sm font-semibold mb-1">Email</label>
+          <input id="auth-email" type="email" required placeholder="you@email.com" class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Password</label>
+          <input id="auth-pass" type="password" required placeholder="Min 6 characters" class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+        </div>
+        <button type="submit" class="btn-orange w-full py-3 text-lg">${type==='login'?'Sign In':'Create Account'}</button>
+      </form>
+      <p class="mt-6 text-center text-sm text-slate-500">
+        ${type==='login'?'New here?':'Have an account?'}
+        <button id="auth-switch" class="text-blue-600 hover:underline font-semibold ml-1">
+          ${type==='login'?'Create account':'Sign in'}
+        </button>
+      </p>
+      <input type="hidden" id="auth-type" value="${type}"/>
+    </div>`;
+}
+
+function cartView(){
+  if(!state.cart.length) return `
+    <div class="text-center py-24 bg-white rounded-2xl shadow max-w-xl mx-auto mt-10">
+      <div class="text-6xl mb-4">🛒</div>
+      <h2 class="text-2xl font-bold mb-2">Cart is Empty</h2>
+      <p class="text-slate-400 mb-6">Add some products first!</p>
+      <button id="shop-now" class="btn-orange px-8 py-3">Shop Now</button>
+    </div>`;
+  const total=state.cart.reduce((s,i)=>s+i.price*(i.qty||1),0);
+  return `
+    <div class="max-w-6xl mx-auto py-8 flex flex-col md:flex-row gap-8">
+      <div class="flex-1 space-y-4">
+        <h2 class="text-2xl font-bold mb-2">Shopping Cart (${cartCount()} items)</h2>
+        ${state.cart.map(item=>`
+          <div class="bg-white p-4 rounded-xl shadow border border-slate-100 flex gap-4 items-center">
+            <img src="${item.image}" class="w-20 h-20 object-cover rounded-lg"/>
+            <div class="flex-1">
+              <h3 class="font-semibold text-sm lc2">${item.name}</h3>
+              <p class="text-orange-500 font-bold mt-1">₹${item.price.toLocaleString('en-IN')}</p>
+              <p class="text-xs text-slate-400">Qty: ${item.qty||1}</p>
+            </div>
+            <button class="remove-item text-slate-300 hover:text-red-500 transition p-2" data-pid="${item.productId}">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>`).join('')}
+      </div>
+      <div class="w-full md:w-80 h-fit bg-white p-6 rounded-2xl shadow border border-slate-100">
+        <h3 class="text-lg font-bold mb-4">Order Summary</h3>
+        <div class="flex justify-between text-sm mb-2"><span>Subtotal</span><span>₹${total.toLocaleString('en-IN')}</span></div>
+        <div class="flex justify-between text-sm text-green-600 mb-4"><span>Shipping</span><span>FREE</span></div>
+        <div class="border-t pt-4 flex justify-between font-black text-xl mb-6">
+          <span>Total</span><span>₹${total.toLocaleString('en-IN')}</span>
+        </div>
+        <button id="start-checkout" class="btn-orange w-full py-3 text-lg">Proceed to Buy</button>
+      </div>
+    </div>`;
+}
+
+function checkoutView(){
+  if(!state.checkoutStep) state.checkoutStep = 1;
+  const total=state.cart.reduce((s,i)=>s+i.price*(i.qty||1),0);
+  return `
+    <div class="max-w-4xl mx-auto py-8">
+      <div class="flex items-center justify-between mb-10">
+        <h2 class="text-3xl font-black">Checkout</h2>
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-full ${state.checkoutStep>=1?'bg-orange-400 text-black':'bg-gray-200'} flex items-center justify-center font-bold">1</span>
+            <span class="text-xs font-bold uppercase hidden md:block">Address</span>
+          </div>
+          <div class="h-px w-8 bg-gray-300"></div>
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-full ${state.checkoutStep>=2?'bg-orange-400 text-black':'bg-gray-200'} flex items-center justify-center font-bold">2</span>
+            <span class="text-xs font-bold uppercase hidden md:block">Payment</span>
+          </div>
+          <div class="h-px w-8 bg-gray-300"></div>
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-full ${state.checkoutStep>=3?'bg-orange-400 text-black':'bg-gray-200'} flex items-center justify-center font-bold">3</span>
+            <span class="text-xs font-bold uppercase hidden md:block">Review</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
+        ${state.checkoutStep === 1 ? `
+          <h3 class="text-xl font-bold mb-6">Select Delivery Address</h3>
+          <div id="address-list" class="space-y-4 mb-8">
+            ${(state.user?.user?.addresses || []).length ? state.user.user.addresses.map((a,idx) => `
+              <label class="flex items-start gap-4 p-4 border rounded-xl cursor-pointer hover:border-orange-400 transition">
+                <input type="radio" name="checkout-address" value="${idx}" ${a.isDefault?'checked':''} class="mt-1 accent-orange-400"/>
+                <div>
+                  <p class="font-bold">${a.label}</p>
+                  <p class="text-sm text-slate-500">${a.street}, ${a.city} - ${a.pincode}</p>
+                </div>
+              </label>
+            `).join('') : '<p class="text-slate-400 italic">No addresses saved. Please add one in your profile.</p>'}
+          </div>
+          <button id="next-payment" class="btn-orange px-10 py-3 font-bold">Continue to Payment</button>
+        ` : state.checkoutStep === 2 ? `
+          <h3 class="text-xl font-bold mb-6">Select Payment Method</h3>
+          <div class="space-y-4 mb-8">
+            <label class="flex items-center gap-4 p-4 border rounded-xl cursor-pointer hover:border-orange-400 transition">
+              <input type="radio" name="payment-method" value="upi" checked class="accent-orange-400"/>
+              <div class="flex items-center gap-3">
+                <span class="font-bold">UPI</span>
+                <span class="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold uppercase">Popular</span>
+              </div>
+            </label>
+            <label class="flex items-center gap-4 p-4 border rounded-xl cursor-pointer hover:border-orange-400 transition">
+              <input type="radio" name="payment-method" value="card" class="accent-orange-400"/>
+              <span class="font-bold">Credit / Debit / ATM Card</span>
+            </label>
+            <label class="flex items-center gap-4 p-4 border rounded-xl cursor-pointer hover:border-orange-400 transition">
+              <input type="radio" name="payment-method" value="cod" class="accent-orange-400"/>
+              <span class="font-bold">Cash on Delivery</span>
+            </label>
+          </div>
+          <div class="flex gap-4">
+            <button onclick="state.checkoutStep=1;render();" class="px-6 py-3 font-bold text-slate-500">Back</button>
+            <button id="next-review" class="btn-orange px-10 py-3 font-bold">Continue to Review</button>
+          </div>
+        ` : `
+          <h3 class="text-xl font-bold mb-6">Review Your Order</h3>
+          <div class="space-y-4 mb-8 border-b pb-6">
+            ${state.cart.map(i => `
+              <div class="flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                  <img src="${i.image}" class="w-12 h-12 rounded object-cover"/>
+                  <div>
+                    <p class="text-sm font-bold">${i.name}</p>
+                    <p class="text-xs text-slate-400">Qty: ${i.qty||1}</p>
+                  </div>
+                </div>
+                <p class="font-bold">₹${(i.price * (i.qty||1)).toLocaleString('en-IN')}</p>
+              </div>
+            `).join('')}
+          </div>
+          <div class="flex justify-between text-xl font-black mb-8">
+            <span>Order Total</span>
+            <span class="text-orange-600">₹${total.toLocaleString('en-IN')}</span>
+          </div>
+          <div class="flex gap-4">
+            <button onclick="state.checkoutStep=2;render();" class="px-6 py-3 font-bold text-slate-500">Back</button>
+            <button id="place-order" class="btn-orange px-10 py-3 font-bold text-lg">Place Order & Pay</button>
+          </div>
+        `}
+      </div>
+    </div>`;
+}
+
+function profileView(){
+  return `
+    <div class="max-w-4xl mx-auto py-8 grid grid-cols-1 md:grid-cols-3 gap-8">
+      <!-- Sidebar -->
+      <div class="space-y-2">
+        <button class="w-full text-left p-4 rounded-xl bg-orange-50 text-orange-600 font-bold">Your Profile</button>
+        <button onclick="setView('orders')" class="w-full text-left p-4 rounded-xl hover:bg-gray-100 transition">Your Orders</button>
+        <button onclick="setView('cart')" class="w-full text-left p-4 rounded-xl hover:bg-gray-100 transition">Shopping Cart</button>
+        <button onclick="logout()" class="w-full text-left p-4 rounded-xl text-red-500 hover:bg-red-50 transition">Logout</button>
+      </div>
+
+      <!-- Main Content -->
+      <div class="md:col-span-2 space-y-8">
+        <div class="bg-white p-8 rounded-2xl shadow-lg">
+          <h3 class="text-xl font-bold mb-6">Personal Information</h3>
+          <div class="space-y-4">
+            <div><label class="text-xs font-bold text-gray-400 uppercase">Name</label><p class="font-bold text-lg">${state.user.user.name}</p></div>
+            <div><label class="text-xs font-bold text-gray-400 uppercase">Email</label><p class="font-bold text-lg">${state.user.user.email}</p></div>
+          </div>
+        </div>
+
+        <div class="bg-white p-8 rounded-2xl shadow-lg">
+          <h3 class="text-xl font-bold mb-6">Manage Addresses</h3>
+          <div class="space-y-4 mb-8">
+            ${(state.user?.user?.addresses || []).map(a => `
+              <div class="p-4 border rounded-xl flex justify-between items-start">
+                <div>
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="font-bold">${a.label}</span>
+                    ${a.isDefault ? `<span class="text-[8px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded font-black uppercase">Default</span>` : ''}
+                  </div>
+                  <p class="text-sm text-slate-500">${a.street}, ${a.city} - ${a.pincode}</p>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          <form id="add-address-form" class="bg-slate-50 p-6 rounded-xl space-y-4">
+            <p class="font-bold text-sm">Add New Address</p>
+            <div class="grid grid-cols-2 gap-4">
+              <input id="addr-label" placeholder="Label (Home/Work)" required class="col-span-2 border p-2.5 rounded-lg outline-none"/>
+              <input id="addr-street" placeholder="Street Address" required class="col-span-2 border p-2.5 rounded-lg outline-none"/>
+              <input id="addr-city" placeholder="City" required class="border p-2.5 rounded-lg outline-none"/>
+              <input id="addr-pin" placeholder="Pincode" required class="border p-2.5 rounded-lg outline-none"/>
+            </div>
+            <button type="submit" class="bg-[#131921] text-white px-6 py-2 rounded-lg font-bold hover:bg-black transition">Add Address</button>
+          </form>
+        </div>
+      </div>
+    </div>`;
+}
+
+function adminView(){
+  const stats = state.analytics || { sales: 0, orders: 0, products: 0, users: 0, recentOrders: [] };
+  return `
+    <div class="max-w-6xl mx-auto py-8">
+      <h2 class="text-3xl font-black mb-8">Admin Dashboard</h2>
+      
+      <!-- Analytics Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+        <div class="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-green-500">
+          <p class="text-xs text-gray-400 font-bold uppercase">Total Sales</p>
+          <p class="text-2xl font-black text-slate-800">₹${stats.sales.toLocaleString('en-IN')}</p>
+        </div>
+        <div class="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-blue-500">
+          <p class="text-xs text-gray-400 font-bold uppercase">Orders</p>
+          <p class="text-2xl font-black text-slate-800">${stats.orders}</p>
+        </div>
+        <div class="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-orange-500">
+          <p class="text-xs text-gray-400 font-bold uppercase">Products</p>
+          <p class="text-2xl font-black text-slate-800">${stats.products}</p>
+        </div>
+        <div class="bg-white p-6 rounded-2xl shadow-lg border-l-4 border-purple-500">
+          <p class="text-xs text-gray-400 font-bold uppercase">Users</p>
+          <p class="text-2xl font-black text-slate-800">${stats.users}</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        <div class="bg-white p-8 rounded-2xl shadow-xl">
+          <h3 class="text-xl font-bold mb-6">Add New Product</h3>
+          <form id="admin-product-form" class="space-y-4">
+            <div>
+              <label class="block text-sm font-semibold mb-1">Product Name</label>
+              <input id="prod-name" name="name" type="text" required class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+            </div>
+            <div class="flex gap-4">
+              <div class="flex-1">
+                <label class="block text-sm font-semibold mb-1">Price (₹)</label>
+                <input id="prod-price" name="price" type="number" required class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+              </div>
+              <div class="flex-1">
+                <label class="block text-sm font-semibold mb-1">Discount (%)</label>
+                <input id="prod-discount" name="discount" type="number" class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+              </div>
+            </div>
+            <div class="flex gap-4">
+              <div class="flex-1">
+                <label class="block text-sm font-semibold mb-1">Category</label>
+                <input id="prod-cat" name="category" type="text" required class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+              </div>
+              <div class="flex-1">
+                <label class="block text-sm font-semibold mb-1">Subcategory</label>
+                <input id="prod-sub" name="subcategory" type="text" required class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold mb-1">Description</label>
+              <textarea id="prod-desc" name="desc" class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold mb-1">Specifications (comma separated)</label>
+              <input id="prod-specs" name="specs" type="text" placeholder="e.g. 8GB RAM, 256GB SSD, 4K Display" class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+            </div>
+            <div class="flex gap-4">
+              <div class="flex-1">
+                <label class="block text-sm font-semibold mb-1">Initial Stock</label>
+                <input id="prod-stock" name="stock" type="number" value="50" class="w-full border p-3 rounded-lg outline-none focus:ring-2 ring-orange-300"/>
+              </div>
+              <div class="flex-1">
+                <label class="block text-sm font-semibold mb-1">Product Image</label>
+                <input id="prod-image" name="image" type="file" accept="image/*" required class="w-full border p-2 rounded-lg"/>
+              </div>
+            </div>
+            <button type="submit" class="btn-orange w-full py-3 text-lg">Upload Product</button>
+          </form>
+        </div>
+
+        <!-- Recent Orders -->
+        <div class="bg-white p-8 rounded-2xl shadow-xl">
+          <h3 class="text-xl font-bold mb-6">Recent Orders</h3>
+          <div class="space-y-4">
+            ${stats.recentOrders.length ? stats.recentOrders.map(o => `
+              <div class="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <p class="text-sm font-bold">${o.userName}</p>
+                  <p class="text-[10px] text-gray-400 font-mono">#${o._id.slice(-8)}</p>
+                </div>
+                <p class="font-black text-orange-600">₹${o.total.toLocaleString('en-IN')}</p>
+              </div>
+            `).join('') : '<p class="text-gray-400 text-sm italic">No recent orders.</p>'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function ordersView(){
+  return `
+    <div class="max-w-4xl mx-auto py-8">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">Your Orders</h2>
+        <button id="nav-logout2" class="text-sm text-red-500 hover:text-red-700 font-semibold">Logout</button>
+      </div>
+      ${!state.orders.length?`
+        <div class="bg-white p-12 rounded-2xl shadow text-center text-slate-400">
+          <div class="text-5xl mb-4">📦</div>
+          <p class="text-lg font-semibold">No orders yet!</p>
+          <button id="shop-now2" class="btn-orange mt-4 px-6 py-2">Start Shopping</button>
+        </div>`:`
+        <div class="space-y-4">
+          ${state.orders.map(o=>`
+            <div class="bg-white p-6 rounded-xl shadow border border-slate-100">
+              <div class="flex flex-wrap justify-between border-b pb-4 mb-4 gap-4">
+                <div><p class="text-xs text-slate-400 uppercase font-bold">Order ID</p><p class="font-mono text-sm">#${o._id.slice(-10).toUpperCase()}</p></div>
+                <div><p class="text-xs text-slate-400 uppercase font-bold">Date</p><p class="text-sm">${new Date(o.createdAt).toLocaleDateString()}</p></div>
+                <div><p class="text-xs text-slate-400 uppercase font-bold">Status</p><p class="text-sm font-bold text-green-600">${o.status}</p></div>
+                <div><p class="text-xs text-slate-400 uppercase font-bold">Total</p><p class="text-sm font-bold text-orange-500">₹${o.total.toLocaleString('en-IN')}</p></div>
+              </div>
+              <div class="flex gap-3 overflow-x-auto pb-1">
+                ${o.items.map(item=>`
+                  <div class="flex-shrink-0 flex items-center gap-2 bg-slate-50 p-2 rounded-lg">
+                    <img src="${item.image}" class="w-12 h-12 object-cover rounded"/>
+                    <div><p class="text-xs font-semibold w-28 lc1">${item.name}</p><p class="text-xs text-slate-400">Qty: ${item.qty||1}</p></div>
+                  </div>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>`}
+    </div>`;
+}
+
+function aiChatSidebar(){
+  return `
+    <div class="chat-sidebar ${state.showChat ? 'open' : ''} flex flex-col">
+      <div class="p-6 bg-[#131921] text-white flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+          <span class="font-bold">KartZone AI Assistant</span>
+        </div>
+        <button id="close-chat" class="hover:text-orange-400 transition text-2xl">&times;</button>
+      </div>
+      <div id="chat-body" class="flex-1 overflow-y-auto p-4 flex flex-col bg-slate-50">
+        ${state.chatMessages.map(m => `
+          <div class="chat-msg ${m.role === 'ai' ? 'chat-msg-ai' : 'chat-msg-user'}">
+            ${m.text}
+          </div>
+        `).join('')}
+      </div>
+      <div class="p-4 border-t bg-white">
+        <div class="flex gap-2">
+          <input id="chat-input" type="text" placeholder="Type a message..." class="flex-1 border p-2 rounded-lg text-sm outline-none focus:ring-2 ring-orange-400"/>
+          <button id="send-chat" class="bg-orange-400 text-white p-2 rounded-lg hover:bg-orange-500 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Event Binding ──────────────────────────────────────────
+function bindEvents(){
+  const $ = id => document.getElementById(id);
+  const on = (id,ev,fn) => { const el=$(id); if(el) el.addEventListener(ev,fn); };
+  const onAll = (sel,ev,fn) => document.querySelectorAll(sel).forEach(el=>el.addEventListener(ev,fn));
+
+  on('nav-home','click',()=>setView('home'));
+  on('nav-cart','click',()=>setView('cart'));
+  on('nav-profile','click',()=>setView(state.user?'profile':'login'));
+  on('nav-admin','click', async () => {
+    try {
+      state.analytics = await api('GET', '/api/admin/analytics');
+    } catch(e) {}
+    setView('admin');
+  });
+  on('nav-logout','click',logout);
+  on('nav-logout2','click',logout);
+  on('back-home','click',()=>setView('home'));
+  on('retry-btn','click',()=>{
+    state.page=1;state.searchQuery='';state.currentCategory='All';
+    loadProducts();
+  });
+  on('prev-page','click',()=>{
+    if(state.page > 1){ state.page--; loadProducts(); window.scrollTo(0,0); }
+  });
+  on('next-page','click',()=>{
+    if(state.page < state.totalPages){ state.page++; loadProducts(); window.scrollTo(0,0); }
+  });
+  onAll('.cat-btn','click',e=>{
+    state.currentCategory = e.currentTarget.dataset.cat;
+    state.page = 1; loadProducts();
+  });
+  on('sort-select','change',e=>{
+    state.sortOrder = e.target.value;
+    state.page = 1; loadProducts();
+  });
+
+  on('search-btn','click',()=>{
+    const q=$('search-input').value;
+    state.searchQuery = q;
+    state.page = 1;
+    loadProducts();
+  });
+  on('search-input','keypress', e => {
+    if(e.key === 'Enter') $('search-btn').click();
+  });
+  on('ai-advisor-input','keypress', e => {
+    if(e.key === 'Enter') $('ai-advisor-btn').click();
+  });
+
+  on('ai-ask-btn', 'click', () => {
+    const q = $('ai-input').value;
+    if(!q) return;
+    toast('AI Assistant is processing... 🤖');
+    setTimeout(() => {
+      const results = state.products.filter(p => 
+        p.name.toLowerCase().includes(q.toLowerCase()) || 
+        p.category.toLowerCase().includes(q.toLowerCase()) ||
+        p.desc.toLowerCase().includes(q.toLowerCase())
+      );
+      if(results.length > 0) {
+        state.products = results;
+        toast(`AI found ${results.length} matches for you! ✨`);
+      } else {
+        toast("AI: I couldn't find exact matches, showing all products.", false);
+      }
+      render();
+    }, 1200);
+  });
+
+  on('ai-advisor-btn', 'click', async () => {
+    const query = $('ai-advisor-input').value;
+    if(!query) return;
+    toast('AI Advisor is analyzing 10,000+ products... 🧠');
+    const recs = await api('GET', `/api/ai/recommend?query=${query}`);
+    const container = $('ai-recommendations');
+    container.innerHTML = recs.map(p => `
+      <div class="glass p-5 rounded-2xl text-slate-800 text-left border-l-4 border-orange-400">
+        <p class="text-[10px] font-black uppercase text-orange-500 mb-1">AI Recommendation</p>
+        <h4 class="font-bold text-sm mb-2 lc1">${p.name}</h4>
+        <p class="text-[10px] text-slate-500 mb-3">${p.aiReason}</p>
+        <div class="flex justify-between items-center">
+          <span class="font-black">₹${p.price.toLocaleString('en-IN')}</span>
+          <button class="text-xs font-bold text-orange-600 underline" onclick="state.selectedId='${p._id}';setView('product')">Details</button>
+        </div>
+      </div>
+    `).join('');
+    container.classList.remove('hidden');
+    window.scrollTo({ top: container.offsetTop - 100, behavior: 'smooth' });
+  });
+
+  onAll('.vote-btn', 'click', async e => {
+    if(!state.user){toast('Sign in to vote!', false); setView('login'); return;}
+    const { vote, pid } = e.currentTarget.dataset;
+    try {
+      const newVotes = await api('POST', `/api/products/${pid}/vote`, { vote });
+      const p = state.products.find(x => x._id === pid) || state.recentlyViewed.find(x => x._id === pid);
+      if(p) p.votes = newVotes;
+      toast(`Vote registered! ${vote==='yes'?'👍':'👎'}`);
+      render();
+    } catch(err) { toast(err.message, false); }
+  });
+
+  on('ai-chat-btn', 'click', () => {
+    state.showChat = !state.showChat;
+    render();
+    if(state.showChat) {
+      setTimeout(() => {
+        const input = $('chat-input');
+        if(input) input.focus();
+        const body = $('chat-body');
+        if(body) body.scrollTop = body.scrollHeight;
+      }, 400);
+    }
+  });
+
+  on('close-chat', 'click', () => { state.showChat = false; render(); });
+
+  on('send-chat', 'click', async () => {
+    const el = $('chat-input');
+    const text = el.value.trim();
+    if(!text) return;
+    
+    state.chatMessages.push({ role: 'user', text });
+    el.value = '';
+    render();
+    
+    const body = $('chat-body');
+    if(body) body.scrollTop = body.scrollHeight;
+
+    try {
+      const recs = await api('GET', `/api/ai/recommend?query=${text}`);
+      let aiText = "";
+      if(recs.length > 0) {
+        aiText = `Based on your request, I recommend the **${recs[0].name}**. It's top-rated for this category! 🚀`;
+      } else {
+        aiText = "I'm searching my catalog... Try asking for 'Best laptop' or 'Phone under 50k'. 🤖";
+      }
+      state.chatMessages.push({ role: 'ai', text: aiText });
+      render();
+      if(body) body.scrollTop = body.scrollHeight;
+    } catch(e) {
+      state.chatMessages.push({ role: 'ai', text: "I'm having a bit of trouble connecting, but I'm here to help! 🔌" });
+      render();
+    }
+  });
+
+  on('chat-input', 'keypress', e => {
+    if(e.key === 'Enter') {
+      const btn = $('send-chat');
+      if(btn) btn.click();
+    }
+  });
+
+  onAll('.add-to-cart', 'click', e => {
+    const pid = e.currentTarget.dataset.pid;
+    const p = state.products.find(x => x._id === pid) || state.recentlyViewed.find(x => x._id === pid);
+    if(p) addToCart({ id: p._id, name: p.name, price: p.price, image: p.image });
+  });
+
+  onAll('.product-card-img, .product-name', 'click', e => {
+    state.selectedId = e.currentTarget.dataset.pid;
+    setView('product');
+  });
+
+  on('shop-now', 'click', () => setView('home'));
+  on('shop-now2', 'click', () => setView('home'));
+
+  on('start-checkout', 'click', () => {
+    if(!state.user) { toast('Please sign in first', false); setView('login'); return; }
+    setView('checkout');
+  });
+
+  on('next-payment', 'click', () => { state.checkoutStep = 2; render(); });
+  on('next-review', 'click', () => { state.checkoutStep = 3; render(); });
+  on('place-order', 'click', placeOrder);
+
+  onAll('.remove-item', 'click', e => removeFromCart(e.currentTarget.dataset.pid));
+
+  on('auth-form', 'submit', async e => {
+    e.preventDefault();
+    const type = $('auth-type').value;
+    const email = $('auth-email').value;
+    const pass = $('auth-pass').value;
+    try {
+      if(type === 'login') await login(email, pass);
+      else await signup($('auth-name').value, email, pass);
+    } catch(err) {
+      const errEl = $('auth-error');
+      errEl.textContent = err.message;
+      errEl.classList.remove('hidden');
+    }
+  });
+
+  on('auth-switch', 'click', () => {
+    const type = $('auth-type').value;
+    setView(type === 'login' ? 'signup' : 'login');
+  });
+
+  on('admin-product-form','submit',async e=>{
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    toast('Uploading product & image... ⏳');
+    try {
+      const res = await fetch(API + '/api/admin/products', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + state.user.token },
+        body: formData
+      });
+      if(!res.ok) {
+        const d = await res.json();
+        throw new Error(d.message || 'Upload failed');
+      }
+      toast('Product added successfully! 🚀');
+      e.target.reset();
+      await loadProducts();
+      setView('home');
+    } catch(err) { toast(err.message, false); }
+  });
+
+  on('add-address-form','submit',async e=>{
+    e.preventDefault();
+    const address = {
+      label: $('addr-label').value,
+      street: $('addr-street').value,
+      city: $('addr-city').value,
+      pincode: $('addr-pin').value
+    };
+    try {
+      const res = await api('POST', '/api/user/address', address);
+      state.user.user.addresses = res;
+      toast('Address added successfully! 🏠');
+      render();
+    } catch(err) { toast(err.message, false); }
+  });
+}
+
+function renderPriceChart(history) {
+  const ctx = document.getElementById('priceChart');
+  if(!ctx) return;
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['6m', '5m', '4m', '3m', '2m', '1m'],
+      datasets: [{
+        label: 'Price (₹)',
+        data: history,
+        borderColor: '#f97316',
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: { display: false }
+      }
+    }
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────
+loadProducts();
+</script>
+</body>
+</html>
